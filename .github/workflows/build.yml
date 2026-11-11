@@ -73,6 +73,14 @@ jobs:
         with:
           workspaces: ${{ env.PROJ }}/native/komet_crypto/rust
 
+      - name: Fetch rlottie (submodule missing in zip)
+        if: env.PROJ != ''
+        run: |
+          if [ ! -f "$PROJ/third_party/rlottie/src/CMakeLists.txt" ]; then
+            rm -rf "$PROJ/third_party/rlottie"
+            git clone --depth 1 https://github.com/Samsung/rlottie.git "$PROJ/third_party/rlottie"
+          fi
+
       - name: Get dependencies
         if: env.PROJ != ''
         working-directory: ${{ env.PROJ }}
@@ -186,6 +194,17 @@ jobs:
       - name: Set Android minimum SDK
         working-directory: build_app
         run: sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
+
+      - name: Disable lint (crashes on runner JDK)
+        working-directory: build_app
+        run: |
+          python3 - <<'PY'
+          p='android/app/build.gradle.kts'
+          s=open(p).read()
+          if 'checkReleaseBuilds' not in s:
+              s=s.replace('android {','android {\n    lint { checkReleaseBuilds = false\n        abortOnError = false }',1)
+          open(p,'w').write(s)
+          PY
 
       - name: Get dependencies
         working-directory: build_app
