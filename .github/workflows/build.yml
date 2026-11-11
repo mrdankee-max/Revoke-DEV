@@ -26,15 +26,20 @@ jobs:
 
       - name: Unpack project zip
         run: |
-          ZIP=$(ls -1t *.zip 2>/dev/null | head -n 1)
+          echo "--- repo files ---"; find . -path ./.git -prune -o -maxdepth 3 \( -type f -o -type d \) -print | head -60
           ROOTDIR=.
-          if [ -n "$ZIP" ]; then
-            echo "::notice::Building from $ZIP"
-            mkdir -p project && unzip -q "$ZIP" -d project
-            ROOTDIR=project
+          DEV=$(find . -path ./.git -prune -o -maxdepth 8 -type d -name app_src -print | head -n 1)
+          REG=$(find . -path ./.git -prune -o -maxdepth 6 -type f -path "*/Revoke/pubspec.yaml" -print | head -n 1)
+          if [ -z "$DEV" ] && [ -z "$REG" ]; then
+            ZIP=$(find . -path ./.git -prune -o -type f -iname "*.zip" -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)
+            if [ -n "$ZIP" ]; then
+              echo "::notice::Building from $ZIP"
+              mkdir -p project && unzip -q "$ZIP" -d project
+              ROOTDIR=project
+              DEV=$(find "$ROOTDIR" -maxdepth 8 -type d -name app_src | head -n 1)
+              REG=$(find "$ROOTDIR" -maxdepth 6 -type f -path "*/Revoke/pubspec.yaml" | head -n 1)
+            fi
           fi
-          REG=$(find "$ROOTDIR" -maxdepth 4 -type f -name pubspec.yaml -path "*/Revoke/pubspec.yaml" | head -n 1)
-          DEV=$(find "$ROOTDIR" -maxdepth 5 -type d -name app_src | head -n 1)
           [ -n "$REG" ] && echo "PROJ=$(dirname "$REG")" >> "$GITHUB_ENV" || echo "PROJ=" >> "$GITHUB_ENV"
           echo "SRC=$DEV" >> "$GITHUB_ENV"
           echo "regular: ${REG:-none}  dev: ${DEV:-none}"
@@ -108,15 +113,20 @@ jobs:
 
       - name: Unpack project zip
         run: |
-          ZIP=$(ls -1t *.zip 2>/dev/null | head -n 1)
+          echo "--- repo files ---"; find . -path ./.git -prune -o -maxdepth 3 \( -type f -o -type d \) -print | head -60
           ROOTDIR=.
-          if [ -n "$ZIP" ]; then
-            echo "::notice::Building from $ZIP"
-            mkdir -p project && unzip -q "$ZIP" -d project
-            ROOTDIR=project
+          DEV=$(find . -path ./.git -prune -o -maxdepth 8 -type d -name app_src -print | head -n 1)
+          REG=$(find . -path ./.git -prune -o -maxdepth 6 -type f -path "*/Revoke/pubspec.yaml" -print | head -n 1)
+          if [ -z "$DEV" ] && [ -z "$REG" ]; then
+            ZIP=$(find . -path ./.git -prune -o -type f -iname "*.zip" -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)
+            if [ -n "$ZIP" ]; then
+              echo "::notice::Building from $ZIP"
+              mkdir -p project && unzip -q "$ZIP" -d project
+              ROOTDIR=project
+              DEV=$(find "$ROOTDIR" -maxdepth 8 -type d -name app_src | head -n 1)
+              REG=$(find "$ROOTDIR" -maxdepth 6 -type f -path "*/Revoke/pubspec.yaml" | head -n 1)
+            fi
           fi
-          REG=$(find "$ROOTDIR" -maxdepth 4 -type f -name pubspec.yaml -path "*/Revoke/pubspec.yaml" | head -n 1)
-          DEV=$(find "$ROOTDIR" -maxdepth 5 -type d -name app_src | head -n 1)
           [ -n "$REG" ] && echo "PROJ=$(dirname "$REG")" >> "$GITHUB_ENV" || echo "PROJ=" >> "$GITHUB_ENV"
           echo "SRC=$DEV" >> "$GITHUB_ENV"
           echo "regular: ${REG:-none}  dev: ${DEV:-none}"
