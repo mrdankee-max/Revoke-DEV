@@ -183,6 +183,24 @@ jobs:
           fail() { grep -nE "Error|error:|FAILED|e: |Could not|Because|version solving|What went wrong|Unresolved|not found|cannot" "$1" | head -12 | cut -c1-280 | while IFS= read -r l; do echo "::error::$l"; done; echo "::error::TAIL: $(tail -8 "$1" | cut -c1-200 | tr '\n' '|')"; exit 1; }
           flutter pub get 2>&1 | tee /tmp/pub.log; [ ${PIPESTATUS[0]} -eq 0 ] || fail /tmp/pub.log
 
+      - name: Build Revoke VPN APK (key login, no dev mode)
+        working-directory: build_app
+        run: |
+          sed -i 's|<script>window.CVPN_DEV=true;</script>||' assets/index.html
+          grep -c 'window.CVPN_DEV=true;</script>' assets/index.html || true
+          fail() { grep -nE "Error|error:|FAILED|e: |Could not|What went wrong" /tmp/vpn.log | head -12 | cut -c1-280 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee /tmp/vpn.log; [ ${PIPESTATUS[0]} -eq 0 ] || fail
+          cp build/app/outputs/flutter-apk/app-release.apk ../Revoke-VPN.apk
+          cp "../$SRC/assets/index.html" assets/index.html 2>/dev/null || cp "$GITHUB_WORKSPACE/$SRC/assets/index.html" assets/index.html
+
+      - name: Upload Revoke VPN APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Revoke-VPN-APK
+          path: Revoke-VPN.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build Revoke DEV APK
         working-directory: build_app
         run: |
