@@ -246,3 +246,119 @@ jobs:
           path: Revoke-DEV.apk
           if-no-files-found: error
           retention-days: 14
+
+  revoke-ios:
+    name: Revoke iOS (unsigned IPA, UI only)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack project zip
+        run: |
+          DEV=$(find . -path ./.git -prune -o -maxdepth 8 -type d -name app_src -print | head -n 1)
+          if [ -z "$DEV" ]; then
+            ZIP=$(find . -path ./.git -prune -o -type f -iname "*.zip" -print | head -n 1)
+            mkdir -p project && unzip -q "$ZIP" -d project
+            DEV=$(find project -maxdepth 8 -type d -name app_src | head -n 1)
+          fi
+          test -n "$DEV" || { echo "::error::app_src not found"; exit 1; }
+          echo "SRC=$DEV" >> "$GITHUB_ENV"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create iOS project
+        run: |
+          flutter create --platforms=ios --org ru.revoke --project-name app build_ios
+          cp -R "$SRC"/lib build_ios/ && cp -R "$SRC"/assets build_ios/ && cp "$SRC"/pubspec.yaml build_ios/
+          sed -i '' 's|<script>window.CVPN_DEV=true;</script>||' build_ios/assets/index.html
+          cd build_ios && /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Revoke" ios/Runner/Info.plist || true
+
+      - name: Build unsigned IPA
+        working-directory: build_ios
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+          mkdir -p Payload && cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr "$GITHUB_WORKSPACE/Revoke-iOS.ipa" Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Revoke-iOS-IPA
+          path: Revoke-iOS.ipa
+
+  revoke-pc:
+    name: Revoke PC (exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack project zip
+        run: |
+          PC=$(find . -path ./.git -prune -o -maxdepth 8 -type d -name Revoke-PC -print | head -n 1)
+          if [ -z "$PC" ]; then
+            ZIP=$(find . -path ./.git -prune -o -type f -iname "*.zip" -print | head -n 1)
+            mkdir -p project && unzip -q "$ZIP" -d project
+            PC=$(find project -maxdepth 8 -type d -name Revoke-PC | head -n 1)
+          fi
+          test -n "$PC" || { echo "::error::Revoke-PC folder not found"; exit 1; }
+          echo "PC=$PC" >> "$GITHUB_ENV"
+          echo "SRCPAGE=$(find "$(dirname "$PC")" -maxdepth 4 -path '*app_src/assets/index.html' | head -n 1)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download sing-box and wintun
+        working-directory: ${{ env.PC }}
+        run: |
+          mkdir -p bin tmp
+          curl -sSL -o tmp/sb.zip https://github.com/SagerNet/sing-box/releases/download/v1.10.7/sing-box-1.10.7-windows-amd64.zip
+          unzip -q tmp/sb.zip -d tmp
+          cp tmp/sing-box-*/sing-box.exe bin/
+          curl -sSL -o tmp/wt.zip https://www.wintun.net/builds/wintun-0.14.1.zip || true
+          if [ -f tmp/wt.zip ]; then unzip -q tmp/wt.zip -d tmp && cp tmp/wintun/bin/amd64/wintun.dll bin/ || true; fi
+          ls -la bin
+
+      - name: Install dependencies
+        working-directory: ${{ env.PC }}
+        run: npm install --no-audit --no-fund 2>&1 | tail -5
+
+      - name: Build Revoke PC (key login)
+        working-directory: ${{ env.PC }}
+        env:
+          EXE_NAME: Revoke-PC
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          [ -n "$SRCPAGE" ] && cp "$GITHUB_WORKSPACE/$SRCPAGE" app/index.html || true
+          sed -i 's|<script>window.CVPN_DEV=true;</script>||' app/index.html
+          rm -f app/.dev
+          npx electron-builder --win portable --x64 2>&1 | tail -15
+          ls dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Revoke-PC-EXE
+          path: ${{ env.PC }}/dist/Revoke-PC.exe
+
+      - name: Build Revoke PC DEV
+        working-directory: ${{ env.PC }}
+        env:
+          EXE_NAME: Revoke-PC-DEV
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          [ -n "$SRCPAGE" ] && cp "$GITHUB_WORKSPACE/$SRCPAGE" app/index.html || true
+          touch app/.dev
+          rm -rf dist
+          npx electron-builder --win portable --x64 2>&1 | tail -15
+          ls dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Revoke-PC-DEV-EXE
+          path: ${{ env.PC }}/dist/Revoke-PC-DEV.exe
